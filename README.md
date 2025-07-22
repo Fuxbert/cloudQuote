@@ -1,57 +1,87 @@
 # cloudQuote
 
-This project will provide pricing information on Equinix Digital Infrastructure resources. In order to gain access to the Equinix API, which will eventually provide the cost, you will need active Equinix Fabric Client Credentials. Please visit https://docs.equinix.com/equinix-api/developer-settings for more information.
+**cloudQuote** is a Python-based utility designed to provide **cost estimation** for infrastructure deployed via **Terraform** on the **Equinix Digital Services** platform.
+
+While the **Equinix Solution Builder** offers pricing without deployment capabilities, and the **Equinix Terraform Provider** enables deployment without pricing, cloudQuote bridges that gap — allowing users to forecast infrastructure costs directly from their Terraform plans.
 
 ---
 
-## Initial Problem:
-Customers will not know the overall **cost of resources / infrastructure** deployed via Terraform, unless they do investigation or rebuild in Equinix Solution Builder in parallel.
+## 🚀 Project Purpose
 
-Currently, _Equinix Solution Builder_ provides the cost, but not the deployment while _Terrform Provider Equinix_ will provide the deployment, but not the cost.
+Equinix customers often face a blind spot: understanding the cost of infrastructure provisioned via Terraform requires manually reconstructing the setup in Solution Builder. cloudQuote solves this by analyzing your Terraform JSON plan and querying the Equinix API for real-time pricing data.
 
-This project is set to close the gap until _Solution Builder_ will be enabled to transform a Design into breathing infrastructure.
+---
 
-### Current Version as of 07/21/2025
-**What's in Scope?**
-Project cloudQuote will provide cost for:
-- Equinix Fabric Cloud Routers
-- Equinix Network Edge Devices
-- Equinix Fabric Virtual Connections:
-  - Cloud Routers to 
-    - Fabric Ports
-    - Network Edge
-    - Service Profiles (CSPs etc.)
-    - Networks (IP-WAN)
-  - Fabric Ports to
-    - Fabric Port
-    - Service Profiles
-    - Networks (EVP-LAN / EP-LAN / E-Tree / EP-Tree)
-  - Network Edge Devices to
-    - Fabric Ports
-    - Service Profiles
-    - Networks (EVP-LAN)
+## 📦 Currently Supported Resources (as of 2025-07-21)
 
-**What's not?**
-Currently, Project cloudQuote will neglect the following options:
-- Equinix Internet Access (no resource in terraform available)
+cloudQuote calculates monthly pricing for:
+
+### Equinix Fabric
+- **Cloud Routers**
+- **Virtual Connections**:
+  - Cloud Router ➜ Fabric Port
+  - Cloud Router ➜ Network Edge
+  - Cloud Router ➜ Service Profile (CSP)
+  - Cloud Router ➜ IP-WAN (Network)
+  - Fabric Port ➜ Fabric Port
+  - Fabric Port ➜ Service Profile
+  - Fabric Port ➜ EVP-LAN / EP-LAN / E-Tree / EP-Tree
+  - Network Edge ➜ Fabric Port / Service Profile / EVP-LAN
+
+### Equinix Network Edge
+- **Virtual Devices** (with or without secondary devices)
+
+---
+
+## 🚫 Currently Out of Scope
+
+The following are **not yet supported**:
+
+- Equinix Internet Access (no Terraform resource available)
 - Network Edge Device Linking Groups
-- Equinix Fabric VC to / from Token
+- Fabric VCs to/from Token endpoints
 
-**The following prerequisites are to be met before the tool can be used:**
-- Create Equinix Developer App / Client Credentials
-- install terraform and create terraform script
-- create tfplan file in JSON-format 
-  (to do so, run following commands: 
-  'terraform plan -out=tfplan.binary'
-  'terraform show -json tfplan.binary > <path/to/tfplan.json>' 
-  You will need to specify the location of the tfplan.json file)
-- install Python in latest version
+---
 
+## ⚙️ Prerequisites
 
+Before using cloudQuote, ensure you have:
 
-### Note:
-The cost provided is bound to a specific billing account. Conditions may vary between different accounts, please contact your Equinix Account Executive for more details.
+1. An active Equinix account with Fabric access
+2. **Equinix API Client Credentials**  
+   [📘 How to get them](https://docs.equinix.com/equinix-api/developer-settings)
+3. **Terraform** installed and configured
+4. A valid `tfplan` file in JSON format:
+   ```bash
+   terraform plan -out=tfplan.binary
+   terraform show -json tfplan.binary > path/to/tfplan.json
+5. Python 3.9+ installed
 
-This project is of experimental nature and not maintained regularly.
-Based on changes within Equinix terraform provider and API documentation, the project owner will keep the code up to date wherever possible. The result is **not** to be seen as an official / binding quotation
+6. currencyconverter, requests, and other dependencies (see requirements.txt)
 
+## 📌 Notes & Disclaimers
+
+- Costs are **billing-account-specific**. For account-based pricing terms, contact your Equinix Account Executive.
+- This tool is **experimental** and maintained on a best-effort basis.
+- Pricing estimates provided by cloudQuote are **not binding** and should not be treated as an official quote.
+
+---
+
+## 📄 License
+
+This project is released under the **MIT License**. See [LICENSE](LICENSE) for details.
+
+---
+
+## 🤝 Contributions
+
+Feedback, bug reports, and pull requests are welcome! Just note that cloudQuote is not an official Equinix product.
+
+---
+
+## 🙏 Acknowledgments
+
+This tool builds on:
+
+- [Equinix Fabric API](https://developer.equinix.com/docs)
+- [Equinix Terraform Provider](https://registry.terraform.io/providers/equinix/equinix/latest/docs)
