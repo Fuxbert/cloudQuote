@@ -10,6 +10,7 @@
 - Terraform (installed and available in <path>
 
 **The following python packages need to be installed:**
+- requests
 - CurrencyConverter
 - tabulate
 

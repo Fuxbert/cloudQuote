@@ -3,32 +3,47 @@ import requests
 import currency_converter
 from currency_converter import CurrencyConverter
 import textwrap
+from tabulate import tabulate
 
 line = ("-" * 75)
+
+ept_profile = "c96dce1c-7462-4eed-b8ba-39db59ab1276"
 
 with open('banner.txt', 'r') as file:
     banner = file.read()
     print(banner)
 
 print("  \033[1mThank you for using Cloud Quote!\033[0m")
-print(textwrap.fill("Please mind this is a beta and some features might not be supported in current state. The project will be maintained regularly to catch up with latest developments and enhancements on Equinix terraform provider.", width = 90, initial_indent="  ", subsequent_indent="  "))
-print()
-print("  Please check <README.mk> for more details and guidance.")
+print(textwrap.fill("Please mind this is a beta and some features might not be supported in current state. Please check <README.md> for more details and guidance.", width = 90, initial_indent="  ", subsequent_indent="  "))
 print()
 print()
-
-print("  Please provide the path to the tfplan.json file (PATH/TO/FILE.json)")
-path = input("  - Default: tfplan.json (in active folder): ")
-if path == "":
-    path = '../JSONs/tfplan.json'
-    print(textwrap("Reminder: to generate tfplan file in JSON format the following commands should be used: 'terraform plan -out=tfplan.binary && terraform show -json tfplan.binary > <PATH/TO/FILE.json> && rm tfplan.binary", width = 90, initial_indent="  ", subsequent_indent="  "))
+print("  \033[1mPlease provide the path to the tfplan file\033[0m (PATH/TO/FILE.json)")
+path = input("  - Default: 'tfplan.json' (in active folder): ")
+if not path:
+    path = "tfplan.json"
+    print(textwrap.fill("\033[1mReminder:\033[0m to generate tfplan file in JSON format the following commands should be used: 'terraform plan -out=tfplan.binary && terraform show -json tfplan.binary > <PATH/TO/FILE.json> && rm tfplan.binary", width = 90, initial_indent="  ", subsequent_indent="  "))
 print()
-print("  What is your desired currency to be displayed?")
+print("  \033[1mWhat is your desired currency to be displayed?\033[0m")
 local_currency = input("  - Please use ISO 4217 code (EUR, USD, etc). Default: EUR: ")
 if local_currency == "":
     local_currency = "EUR"
 print()
-fcr = 0; ne = 0; vc = 0; cost = 0; total = 0; assets = 0; fcr_sub = 0; ne_sub = 0; vc_sub = 0
+check = 0
+print(textwrap.fill("This tool can provide a \033[1md\033[0metailed list of assets or a brief \033[1ms\033[0mummary. Would you prefer the full details [d], summary only [s] or both [ds]?", width = 90, initial_indent="  ", subsequent_indent="  "))
+display = input("  (Default: 'ds'): ")
+
+while check == 0:
+    if not display:
+        display = "ds"
+        check = 1
+        continue
+    if display == "d" or display == "s" or display == "ds":
+        check = 1
+    else:
+        display = input("  Sorry, hit 'd' for 'Detailed View', 's' for 'Summary Only' or 'ds' for both: ")
+
+fcr = 0; ne = 0; vc = 0; cost = 0; total = 0; assets = 0; fcr_sub = 0; ne_sub = 0; vc_sub = 0; ept = 0; ept_sub = 0; eia = 0; eia_sub = 0
+token = None
 
 filters = {
     "product_type": {  
@@ -203,8 +218,7 @@ z_side_filter = {
         ]
     }
 
-token = None
-url = "https://api.equinix.com/oauth2/v1/token"
+# ------------------------------------------------------------------------------------------------------
 # Read Client ID / Client Secret from variables section
 with open(path, 'r') as tfplan:
     config = json.load(tfplan)
@@ -214,7 +228,10 @@ with open(path, 'r') as tfplan:
     client_secret = config['variables']['client_secret']['value']
     if client_secret is None:
         client_secret = input("Please provide your Fabric Client ID for authentication: ")
+
+# ------------------------------------------------------------------------------------------------------
 # prepare API Call
+url = "https://api.equinix.com/oauth2/v1/token"
 headers = {
     "content-type": "application/json"
     }
@@ -239,6 +256,11 @@ headers = {
     }
 
 # ------------------------------------------------------------------------------------------------------
+#Initial Demark Line
+print()
+print(line)
+
+# ------------------------------------------------------------------------------------------------------
 # Collect Assets from ../JSONs/tfplan.json
 
 try:
@@ -250,13 +272,11 @@ try:
     for resource in resources:
         resource_type = resource.get('type')
         resource_values = resource.get('values', {})
-        resource_address = resource.get('address')
-        
+        resource_address = resource.get('address')        
     
 # ------------------------------------------------------------------------------------------------------
 # Collect FCRs
         if resource_type == 'equinix_fabric_cloud_router':
-            print(line)
             data['type'] = resource_type
             name = resource_values.get('name')
             packages = resource_values.get('package', [])
@@ -304,8 +324,10 @@ try:
                     cost = float(CurrencyConverter().convert((response.json()['data'][0]['charges'][0]['price']), currency, local_currency))
                     total = total + cost
                     fcr_sub = fcr_sub + cost
-                    print("|", f"Fabric Cloud Router {fcr} ({name}) in {metro}:".ljust(len(line) - 4), "|")
-                    print("|", (f"{cost:.2f} " + local_currency).rjust(len(line) - 4), "|")
+                    if display == "d" or display == "ds":
+                        print("|", f"Fabric Cloud Router {fcr} ({name}) in {metro}:".ljust(len(line) - 4), "|")
+                        print("|", (f"{cost:.2f} " + local_currency).rjust(len(line) - 4), "|")
+                        print(line)
                 else:
                     print("  --- Sorry, something went wrong! ---")
                     print("Error:", response.status_code, response.text)
@@ -313,7 +335,6 @@ try:
 # ------------------------------------------------------------------------------------------------------
 # Collect VIRTUAL DEVICEs
         elif resource_type == 'equinix_network_device': 
-            print(line)
             type = resource_type
             name = resource_values.get('hostname')
             account_number = resource_values.get('account_number')
@@ -353,8 +374,10 @@ try:
             if response.status_code == 200:
                 currency = response.json()['primary']['currency']
                 cost = float(CurrencyConverter().convert((response.json()['primary']['charges'][0]['monthlyRecurringCharges']), currency, local_currency))
-                print("|", f"Cost for Virtual Device {ne} ({name}) in {metro_code}:".ljust(len(line) - 4), "|")
-                print("|", (f"{cost:.2f} " + local_currency).rjust(len(line) - 4), "|")
+                if display == "d" or display == "ds":
+                    print("|", f"Cost for Virtual Device {ne} ({name}) in {metro_code}:".ljust(len(line) - 4), "|")
+                    print("|", (f"{cost:.2f} " + local_currency).rjust(len(line) - 4), "|")
+                    print(line)
                 ne_sub = ne_sub + cost
                 total = total + cost
             else:
@@ -396,9 +419,10 @@ try:
                 if response.status_code == 200:
                     currency = response.json()['primary']['currency']
                     cost = float(CurrencyConverter().convert(((response.json()['primary']['charges'][0]['monthlyRecurringCharges'])), currency, 'EUR'))
-                    print(line)
-                    print("|", f"Virtual Device {ne} ({name}) in {sec_metro_code}:".ljust(len(line) - 4), "|")
-                    print("|", (f"{cost:.2f} " + local_currency).rjust(len(line) - 4), "|")
+                    if display == "d" or display == "ds":
+                        print("|", f"Virtual Device {ne} ({name}) in {sec_metro_code}:".ljust(len(line) - 4), "|")
+                        print("|", (f"{cost:.2f} " + local_currency).rjust(len(line) - 4), "|")
+                        print(line)
                     total = total + cost
                     ne_sub = ne_sub + cost
                 else:
@@ -406,9 +430,100 @@ try:
                     print("  Error:", response.status_code, response.text)
 
 # ------------------------------------------------------------------------------------------------------
+# Collect EPT Services
+        elif resource_type == 'equinix_fabric_precision_time_service':
+            service_type = resource_values.get('type')
+            resource_address = resource['address']
+            name = resource_values.get('name')
+            packages = resource_values.get('package', {})
+            package_code = packages['code']
+            ept = ept + 1
+            assets = assets + 1 
+            
+            for config in tf_config:
+                if config['address'] == resource_address:
+                    config_expressions = config.get('expressions', {})
+                    connections = config_expressions.get('connections', {})
+                    references = connections.get('references', [])
+                    vc_address = references[1]
+                    for resource in resources:
+                        if resource.get('address') == vc_address:
+                            values = resource.get('values', [])
+                            a_side = values.get('a_side', [])
+                            a_side_ap = a_side[0].get('access_point', [])
+                            a_side_ap_type = a_side_ap[0].get('type')
+                            if a_side_ap_type == "COLO":
+                                port_uuid = a_side_ap[0]['port'][0]['uuid']
+                                url = f"https://api.equinix.com/fabric/v4/ports/{port_uuid}"
+                                response = requests.get(url, headers = headers)
+                                metro = response.json()['location']['metroCode']
+                                metro_code = [str(response.json()['location']['metroCode'])]
+
+                            elif a_side_ap_type == "VD":
+                                vd_uuid = a_side_ap[0]['virtual_device'][0]['uuid']
+                                if vd_uuid is None:
+                                    #vc_address = resource.get('address')
+                                    for config in tf_config:
+                                        config_expressions = config.get('expressions', {})
+                                        if config.get('address') == vc_address:
+                                            vd_address = config_expressions['a_side'][0]['access_point'][0]['virtual_device'][0]['uuid']['references'][1]
+                                            for resource in resources:
+                                                if resource['address'] == vd_address:
+                                                    metro_code = [str(resource['values']['location'][0]['metro_code'])]
+                                else:
+                                    url = f"https://api.equinix.com/ne/v1/devices/{vd_uuid}"
+                                    response = requests.get(url, headers = headers)
+                                    if response.status_code == 200:
+                                        metro_code = response.json()['metroCode']
+                                    else:
+                                        print("  --- Sorry, something went wrong! ---")
+                                        print("Error:", response.status_code, response.text)
+                    
+                            url = "https://api.equinix.com/fabric/v4/prices/search"
+                            data = {
+                                "filter": { 
+                                    "and": [
+                                        {
+                                            "property": "/type",
+                                            "operator": "=",
+                                            "values": ["PRECISION_TIME_PRODUCT"]
+                                            },
+                                        {
+                                            "property": "/timeService/type",
+                                            "operator": "=",
+                                            "values": [service_type]
+                                            },
+                                        {
+                                            "property": "/timeService/package/code",
+                                            "operator": "=",
+                                            "values": [package_code]
+                                            },
+                                        {
+                                            "property": "/connection/aSide/accessPoint/location/metroCode",
+                                            "operator": "=",
+                                            "values": [str(metro_code)]
+                                            }
+                                        ]
+                                    }
+                                }
+                            # Make the POST request
+                            response = requests.post(url, headers=headers, data=json.dumps(data))
+                            if response.status_code == 200:
+                                currency = response.json()['data'][0]['currency']
+                                cost = float(CurrencyConverter().convert((response.json()['data'][0]['charges'][0]['price']), currency, local_currency))
+                                total = total + cost
+                                ept_sub = ept_sub + cost
+                                if display == "d" or display == "ds":
+                                    print("|", f"Precision Time Service {ept} ({name}) in {metro_code}:".ljust(len(line) - 4), "|")
+                                    print("|", (f"{cost:.2f} " + local_currency).rjust(len(line) - 4), "|")
+                                    print(line)
+                            else:
+                                print("  --- Sorry, something went wrong! ---")
+                                print("Error:", response.status_code, response.text)
+
+# ------------------------------------------------------------------------------------------------------
 # Collect VCs        
-        if resource_type == 'equinix_fabric_connection':
-            print(line)
+        elif resource_type == 'equinix_fabric_connection':
             vc = vc + 1
             assets = assets + 1
             name = resource_values['name']
@@ -420,14 +535,131 @@ try:
 
             a_side = resource_values.get('a_side', []) 
             a_side_ap = a_side[0].get('access_point', [])
-            filters['a_side_ap_type']['values'] = [a_side_ap[0].get('type')]
+            a_side_ap_type = a_side_ap[0]['type']
+            filters['a_side_ap_type']['values'] = [str(a_side_ap[0].get('type'))]
 
             z_side = resource_values.get('z_side', [])
             z_side_ap = z_side[0].get('access_point', [])
-            filters['z_side_ap_type']['values'] = [z_side_ap[0]['type']]
+            z_side_ap_type = z_side_ap[0]['type']
+            filters['z_side_ap_type']['values'] = [str(z_side_ap[0].get('type'))]
+            if z_side_ap[0]['profile'] != []:
+                if z_side_ap[0]['profile'][0]['uuid'] == ept_profile:
+                    vc = vc - 1
+                    assets = assets - 1
+                    continue
+# ----------------------------------- FCR to SP: ------------------------------------
+                elif filters['a_side_ap_type']['values'] == ["CLOUD_ROUTER"] and filters['z_side_ap_type']['values'] == ["SP"]:
+    # A-Side
+                    router = a_side_ap[0]['router'][0]
+                    if router == {}:
+                        vc_address = resource.get('address')
+                        for config in tf_config:
+                            config_expressions = config.get('expressions', {})
+                            if config.get('address') == vc_address:
+                                fcr_address = config_expressions['a_side'][0]['access_point'][0]['router'][0]['uuid']['references'][1]
+                                for resource in resources:
+                                    if resource['address'] == fcr_address:
+                                        filters['a_side_location']['values'] = [str(resource['values']['location'][0]['metro_code'])]
+                    else:            
+                        fcr_uuid = router['uuid']  
+                        url = f"https://api.equinix.com/fabric/v4/routers/{fcr_uuid}"
+                        response = requests.get(url, headers = headers)
+                        if response.status_code == 200:
+                            filters['a_side_location']['values'] = [response.json()['location']['metroCode']]
+                        else: 
+                            print(response.status_code, response.text)
+    # Z-Side
+                    filters['z_side_sp_uuid']['values'] = [str(z_side_ap[0]['profile'][0]['uuid'])]
+                    filters['z_side_location']['values'] = [str(z_side_ap[0]['location'][0]['metro_code'])]
+                    
+                    url = "https://api.equinix.com/fabric/v4/prices/search"
+                    data = { "filter": {"and": general_filter + a_side_filter['fcr'] + z_side_filter['sp']}}
+                    response = requests.post(url, headers=headers, data=json.dumps(data, indent=2))
+                    if response.status_code == 200:
+                        currency = response.json()['data'][0]['currency']
+                        cost = float(CurrencyConverter().convert((response.json()['data'][0]['charges'][0]['price']), currency, local_currency))
+                        total = total + cost
+                        vc_sub = vc_sub + cost
+                        if display == "d" or display == "ds":
+                            print("|", f"{resource_values['type']} Fabric VC {vc} ({name}):".ljust(len(line) - 4), "|")
+                            print("|", (f"{cost:.2f} " + local_currency).rjust(len(line) - 4), "|")
+                            print(line)
+                    else:
+                        print("  --- Sorry, something went wrong! ---")
+                        print("  Error:", response.status_code, response.text)
 
-# -------------------------------- Port to Port: --------------------------------
-            if filters['a_side_ap_type']['values'] ==  ["COLO"] and filters['z_side_ap_type']['values'] ==  ["COLO"]:  
+# ----------------------------------- Port to SP: -----------------------------------           
+                elif filters['a_side_ap_type']['values'] ==  ["COLO"] and filters['z_side_ap_type']['values'] ==  ["SP"]:  
+                    if z_side_ap[0]['profile'][0]['uuid'] != "96dce1c-7462-4eed-b8ba-39db59ab1276":
+    # A-Side
+                        a_side_port_uuid = a_side_ap[0]['port'][0]['uuid']
+                        url = f"https://api.equinix.com/fabric/v4/ports/{a_side_port_uuid}"
+                        response = requests.get(url, headers = headers)
+                        
+                        filters['a_side_location']['values'] = [response.json()['location']['metroCode']]
+                        filters['buyout']['values'] = [(str(response.json()['settings']['buyout']).lower())]
+    # Z-Side
+                        filters['z_side_sp_uuid']['values'] = [z_side_ap[0]['profile'][0]['uuid']]
+                        filters['z_side_location']['values'] = [z_side_ap[0]['location'][0]['metro_code']]
+                        
+                        url = "https://api.equinix.com/fabric/v4/prices/search"
+                        data = { "filter": {"and": general_filter + a_side_filter['port'] + z_side_filter['sp']}}
+                        response = requests.post(url, headers=headers, data=json.dumps(data, indent=2))
+                        if response.status_code == 200:
+                            currency = response.json()['data'][0]['currency']
+                            cost = float(CurrencyConverter().convert((response.json()['data'][0]['charges'][0]['price']), currency, local_currency))
+                            total = total + cost
+                            vc_sub = vc_sub + cost
+                            if display == "d" or display == "ds":
+                                print("|", f"{resource_values['type']} Fabric VC {vc} ({name}):".ljust(len(line) - 4), "|")
+                                print("|", (f"{cost:.2f} " + local_currency).rjust(len(line) - 4), "|")
+                                print(line)
+                        else:
+                            print("  --- Sorry, something went wrong! ---")
+                            print("  Error:", response.status_code, response.text)
+
+# ------------------------------------ VD to SP: ------------------------------------
+                elif filters['a_side_ap_type']['values'] == ["VD"] and filters['z_side_ap_type']['values'] == ["SP"]:
+    # A-Side        
+                    vd_uuid = a_side_ap[0]['virtual_device'][0]['uuid']
+                    if vd_uuid is None:
+                        vc_address = resource.get('address')
+                        for config in tf_config:
+                            config_expressions = config.get('expressions', {})
+                            if config.get('address') == vc_address:
+                                vd_address = config_expressions['a_side'][0]['access_point'][0]['virtual_device'][0]['uuid']['references'][1]
+                                for resource in resources:
+                                    if resource['address'] == vd_address:
+                                        filters['a_side_location']['values'] = [str(resource['values']['location'][0]['metro_code'])]
+                    else:            
+                        url = f"https://api.equinix.com/ne/v1/devices/{vd_uuid}"
+                        response = requests.get(url, headers = headers)
+                        if response.status_code == 200:
+                            filters['a_side_location']['values'] = [response.json()['metroCode']]
+                        else:
+                            print("  --- Sorry, something went wrong! ---")
+                            print("Error:", response.status_code, response.text)
+    # Z-Side
+                    filters['z_side_sp_uuid']['values'] = [z_side_ap[0]['profile'][0]['uuid']]
+                    filters['z_side_location']['values'] = [z_side_ap[0]['location'][0]['metro_code']]
+                    
+                    url = "https://api.equinix.com/fabric/v4/prices/search"
+                    data = { "filter": {"and": general_filter + a_side_filter['fcr'] + z_side_filter['sp']}}
+                    response = requests.post(url, headers=headers, data=json.dumps(data, indent=2))
+                    if response.status_code == 200:
+                        currency = response.json()['data'][0]['currency']
+                        cost = float(CurrencyConverter().convert((response.json()['data'][0]['charges'][0]['price']), currency, local_currency))
+                        total = total + cost
+                        vc_sub = vc_sub + cost
+                        if display == "d" or display == "ds":
+                            print("|", f"{resource_values['type']} Fabric VC {vc} ({name}):".ljust(len(line) - 4), "|")
+                            print("|", (f"{cost:.2f} " + local_currency).rjust(len(line) - 4), "|")
+                            print(line)
+                    else: 
+                        print(response.status_code, response.text)
+
+# ---------------------------------- Port to Port: ----------------------------------
+            elif filters['a_side_ap_type']['values'] ==  ["COLO"] and filters['z_side_ap_type']['values'] ==  ["COLO"]:  
 # A-Side
                 a_side_port_uuid = a_side_ap[0]['port'][0]['uuid']
                 url = f"https://api.equinix.com/fabric/v4/ports/{a_side_port_uuid}"
@@ -449,40 +681,15 @@ try:
                         cost = float(CurrencyConverter().convert((response.json()['data'][0]['charges'][0]['price']), currency, local_currency))
                         vc_sub = vc_sub + cost
                         total = total + cost
-                        print("|", f"{resource_values['type']} Fabric VC {vc} ({name}):".ljust(len(line) - 4), "|")
-                        print("|", (f"{cost:.2f} " + local_currency).rjust(len(line) - 4), "|")
+                        if display == "d" or display == "ds":
+                            print("|", f"{resource_values['type']} Fabric VC {vc} ({name}):".ljust(len(line) - 4), "|")
+                            print("|", (f"{cost:.2f} " + local_currency).rjust(len(line) - 4), "|")
+                            print(line)
                 else:
                     print("  --- Sorry, something went wrong! ---")
                     print("  Error:", response.status_code, response.text)
 
-# --------------------------------- Port to SP: ---------------------------------           
-            elif filters['a_side_ap_type']['values'] ==  ["COLO"] and filters['z_side_ap_type']['values'] ==  ["SP"]:  
-# A-Side
-                a_side_port_uuid = a_side_ap[0]['port'][0]['uuid']
-                url = f"https://api.equinix.com/fabric/v4/ports/{a_side_port_uuid}"
-                response = requests.get(url, headers = headers)
-                
-                filters['a_side_location']['values'] = [response.json()['location']['metroCode']]
-                filters['buyout']['values'] = [(str(response.json()['settings']['buyout']).lower())]
-# Z-Side
-                filters['z_side_sp_uuid']['values'] = [z_side_ap[0]['profile'][0]['uuid']]
-                filters['z_side_location']['values'] = [z_side_ap[0]['location'][0]['metro_code']]
-                
-                url = "https://api.equinix.com/fabric/v4/prices/search"
-                data = { "filter": {"and": general_filter + a_side_filter['port'] + z_side_filter['sp']}}
-                response = requests.post(url, headers=headers, data=json.dumps(data, indent=2))
-                if response.status_code == 200:
-                    currency = response.json()['data'][0]['currency']
-                    cost = float(CurrencyConverter().convert((response.json()['data'][0]['charges'][0]['price']), currency, local_currency))
-                    total = total + cost
-                    vc_sub = vc_sub + cost
-                    print("|", f"{resource_values['type']} Fabric VC {vc} ({name}):".ljust(len(line) - 4), "|")
-                    print("|", (f"{cost:.2f} " + local_currency).rjust(len(line) - 4), "|")
-                else:
-                    print("  --- Sorry, something went wrong! ---")
-                    print("  Error:", response.status_code, response.text)
-
-# ------------------------------ Port to Network: -------------------------------
+# --------------------------------- Port to Network: --------------------------------
             elif filters['a_side_ap_type']['values'] ==  ["COLO"] and filters['z_side_ap_type']['values'] ==  ["NETWORK"]:  
 # A-Side
                 a_side_port_uuid = a_side_ap[0]['port'][0]['uuid']
@@ -516,13 +723,15 @@ try:
                     cost = float(CurrencyConverter().convert((response.json()['data'][0]['charges'][0]['price']), currency, local_currency))
                     total = total + cost
                     vc_sub = vc_sub + cost
-                    print("|", f"{resource_values['type']} Fabric VC {vc} ({name}):".ljust(len(line) - 4), "|")
-                    print("|", (f"{cost:.2f} " + local_currency).rjust(len(line) - 4), "|")
+                    if display == "d" or display == "ds":
+                        print("|", f"{resource_values['type']} Fabric VC {vc} ({name}):".ljust(len(line) - 4), "|")
+                        print("|", (f"{cost:.2f} " + local_currency).rjust(len(line) - 4), "|")
+                        print(line)
                 else:
                     print("  --- Sorry, something went wrong! ---")
                     print("  Error:", response.status_code, response.text)
 
-# -------------------------------- FCR to Port: ---------------------------------
+# ----------------------------------- FCR to Port: ----------------------------------
             elif filters['a_side_ap_type']['values'] == ["CLOUD_ROUTER"] and filters['z_side_ap_type']['values'] == ["COLO"]:
 # A-Side
                 router = a_side_ap[0]['router'][0]
@@ -558,13 +767,15 @@ try:
                     cost = float(CurrencyConverter().convert((response.json()['data'][0]['charges'][0]['price']), currency, local_currency))
                     total = total + cost
                     vc_sub = vc_sub + cost
-                    print("|", f"{resource_values['type']} Fabric VC {vc} ({name}):".ljust(len(line) - 4), "|")
-                    print("|", (f"{cost:.2f} " + local_currency).rjust(len(line) - 4), "|")
+                    if display == "d" or display == "ds":
+                        print("|", f"{resource_values['type']} Fabric VC {vc} ({name}):".ljust(len(line) - 4), "|")
+                        print("|", (f"{cost:.2f} " + local_currency).rjust(len(line) - 4), "|")
+                        print(line)
                 else:
                     print("  --- Sorry, something went wrong! ---")
                     print("  Error:", response.status_code, response.text)
 
-# --------------------------------- FCR to VD: ----------------------------------
+# ------------------------------------ FCR to VD: -----------------------------------
             elif filters['a_side_ap_type']['values'] ==  ["CLOUD_ROUTER"] and filters['z_side_ap_type']['values'] ==  ["VD"]:  
 # A-Side
                 router = a_side_ap[0]['router'][0]
@@ -618,13 +829,15 @@ try:
                         cost = float(CurrencyConverter().convert((response.json()['data'][0]['charges'][0]['price']), currency, local_currency))
                         total = total + cost
                         vc_sub = vc_sub + cost
-                        print("|", f"{resource_values['type']} Fabric VC {vc} ({name}):".ljust(len(line) - 4), "|")
-                        print("|", (f"{cost:.2f} " + local_currency).rjust(len(line) - 4), "|")
+                        if display == "d" or display == "ds":
+                            print("|", f"{resource_values['type']} Fabric VC {vc} ({name}):".ljust(len(line) - 4), "|")
+                            print("|", (f"{cost:.2f} " + local_currency).rjust(len(line) - 4), "|")
+                            print(line)
                 else:
                     print("  --- Sorry, something went wrong! ---")
                     print("  Error:", response.status_code, response.text)
 
-# ------------------------------ FCR to Network: --------------------------------
+# --------------------------------- FCR to Network: ---------------------------------
             elif filters['a_side_ap_type']['values'] ==  ["CLOUD_ROUTER"] and filters['z_side_ap_type']['values'] ==  ["NETWORK"]:  
 # A-Side
                 router = a_side_ap[0]['router'][0]
@@ -675,52 +888,15 @@ try:
                         cost = float(CurrencyConverter().convert((response.json()['data'][0]['charges'][0]['price']), currency, local_currency))
                         total = total + cost
                         vc_sub = vc_sub + cost
-                        print("|", f"{resource_values['type']} Fabric VC {vc} ({name}):".ljust(len(line) - 4), "|")
-                        print("|", (f"{cost:.2f} " + local_currency).rjust(len(line) - 4), "|")
+                        if display == "d" or display == "ds":
+                            print("|", f"{resource_values['type']} Fabric VC {vc} ({name}):".ljust(len(line) - 4), "|")
+                            print("|", (f"{cost:.2f} " + local_currency).rjust(len(line) - 4), "|")
+                            print(line)
                 else:
                     print("  --- Sorry, something went wrong! ---")
                     print(response.status_code, response.text)
 
-# --------------------------------- FCR to SP: ----------------------------------
-            elif filters['a_side_ap_type']['values'] ==  ["CLOUD_ROUTER"] and filters['z_side_ap_type']['values'] ==  ["SP"]:
-# A-Side
-                router = a_side_ap[0]['router'][0]
-                if router == {}:
-                    vc_address = resource.get('address')
-                    for config in tf_config:
-                        config_expressions = config.get('expressions', {})
-                        if config.get('address') == vc_address:
-                            fcr_address = config_expressions['a_side'][0]['access_point'][0]['router'][0]['uuid']['references'][1]
-                            for resource in resources:
-                                if resource['address'] == fcr_address:
-                                    filters['a_side_location']['values'] = [str(resource['values']['location'][0]['metro_code'])]
-                else:            
-                    fcr_uuid = router['uuid']  
-                    url = f"https://api.equinix.com/fabric/v4/routers/{fcr_uuid}"
-                    response = requests.get(url, headers = headers)
-                    if response.status_code == 200:
-                        filters['a_side_location']['values'] = [response.json()['location']['metroCode']]
-                    else: 
-                        print(response.status_code, response.text)
-# Z-Side
-                filters['z_side_sp_uuid']['values'] = [z_side_ap[0]['profile'][0]['uuid']]
-                filters['z_side_location']['values'] = [z_side_ap[0]['location'][0]['metro_code']]
-                
-                url = "https://api.equinix.com/fabric/v4/prices/search"
-                data = { "filter": {"and": general_filter + a_side_filter['fcr'] + z_side_filter['sp']}}
-                response = requests.post(url, headers=headers, data=json.dumps(data, indent=2))
-                if response.status_code == 200:
-                    currency = response.json()['data'][0]['currency']
-                    cost = float(CurrencyConverter().convert((response.json()['data'][0]['charges'][0]['price']), currency, local_currency))
-                    total = total + cost
-                    vc_sub = vc_sub + cost
-                    print("|", f"{resource_values['type']} Fabric VC {vc} ({name}):".ljust(len(line) - 4), "|")
-                    print("|", (f"{cost:.2f} " + local_currency).rjust(len(line) - 4), "|")
-                else:
-                    print("  --- Sorry, something went wrong! ---")
-                    print("  Error:", response.status_code, response.text)
-
-# -------------------------------- VD to Port: ---------------------------------
+# ----------------------------------- VD to Port: -----------------------------------
             elif filters['a_side_ap_type']['values'] == ["VD"] and filters['z_side_ap_type']['values'] == ["COLO"]:
 # A-Side
                 vd_uuid = a_side_ap[0]['virtual_device'][0]['uuid']
@@ -755,8 +931,10 @@ try:
                     cost = float(CurrencyConverter().convert((response.json()['data'][0]['charges'][0]['price']), currency, local_currency))
                     total = total + cost
                     vc_sub = vc_sub + cost
-                    print("|", f"{resource_values['type']} Fabric VC {vc} ({name}):".ljust(len(line) - 4), "|")
-                    print("|", (f"{cost:.2f} " + local_currency).rjust(len(line) - 4), "|")
+                    if display == "d" or display == "ds":
+                        print("|", f"{resource_values['type']} Fabric VC {vc} ({name}):".ljust(len(line) - 4), "|")
+                        print("|", (f"{cost:.2f} " + local_currency).rjust(len(line) - 4), "|")
+                        print(line)
                 else:
                     print("  --- Sorry, something went wrong! ---")
                     print("  Error:", response.status_code, response.text)
@@ -810,66 +988,45 @@ try:
                         cost = float(CurrencyConverter().convert((response.json()['data'][0]['charges'][0]['price']), currency, local_currency))
                         total = total + cost
                         vc_sub = vc_sub + cost
-                        print("|", f"{resource_values['type']} Fabric VC {vc} ({name}):".ljust(len(line) - 4), "|")
-                        print("|", (f"{cost:.2f} " + local_currency).rjust(len(line) - 4), "|")
+                        if display == "d" or display == "ds":
+                            print("|", f"{resource_values['type']} Fabric VC {vc} ({name}):".ljust(len(line) - 4), "|")
+                            print("|", (f"{cost:.2f} " + local_currency).rjust(len(line) - 4), "|")
+                            print(line)
                 else:
                     print("  --- Sorry, something went wrong! ---")
                     print(response.status_code, response.text)
-
-# ------------------------------- VD to SP: -------------------------------
-            elif filters['a_side_ap_type']['values'] == ["VD"] and filters['z_side_ap_type']['values'] == ["SP"]:
-# A-Side
-                vd_uuid = a_side_ap[0]['virtual_device'][0]['uuid']
-                if vd_uuid is None:
-                    vc_address = resource.get('address')
-                    for config in tf_config:
-                        config_expressions = config.get('expressions', {})
-                        if config.get('address') == vc_address:
-                            vd_address = config_expressions['a_side'][0]['access_point'][0]['virtual_device'][0]['uuid']['references'][1]
-                            for resource in resources:
-                                if resource['address'] == vd_address:
-                                    filters['a_side_location']['values'] = [str(resource['values']['location'][0]['metro_code'])]
-                else:            
-                    url = f"https://api.equinix.com/ne/v1/devices/{vd_uuid}"
-                    response = requests.get(url, headers = headers)
-                    if response.status_code == 200:
-                        filters['a_side_location']['values'] = [response.json()['metroCode']]
-                    else:
-                        print("  --- Sorry, something went wrong! ---")
-                        print("Error:", response.status_code, response.text)
-# Z-Side
-                filters['z_side_sp_uuid']['values'] = [z_side_ap[0]['profile'][0]['uuid']]
-                filters['z_side_location']['values'] = [z_side_ap[0]['location'][0]['metro_code']]
-                
-                url = "https://api.equinix.com/fabric/v4/prices/search"
-                data = { "filter": {"and": general_filter + a_side_filter['fcr'] + z_side_filter['sp']}}
-                response = requests.post(url, headers=headers, data=json.dumps(data, indent=2))
-                if response.status_code == 200:
-                    currency = response.json()['data'][0]['currency']
-                    cost = float(CurrencyConverter().convert((response.json()['data'][0]['charges'][0]['price']), currency, local_currency))
-                    total = total + cost
-                    vc_sub = vc_sub + cost
-                    print("|", f"{resource_values['type']} Fabric VC {vc} ({name}):".ljust(len(line) - 4), "|")
-                    print("|", (f"{cost:.2f} " + local_currency).rjust(len(line) - 4), "|")
-                else: 
-                    print(response.status_code, response.text)
-
-# ----------------------------------------------- WRAP-UP ----------------------------------------------
-
-    print(line)
-    print()
-    print(f"Successfully processed", assets, "resources")
-    print()
     
-    if fcr_sub != 0:
-        print(f"Costs for Fabric Cloud Routers: | {fcr_sub:.2f} {local_currency}")
-    if ne_sub != 0:
-        print(f"Costs for Network Edge Devices: | {ne_sub:.2f} {local_currency}")
-    if vc_sub != 0:
-        print(f"Costs for Fabric VCs:           | {vc_sub:.2f} {local_currency}")
-    print()
-    print(f"Total Cost of project:          | {total:.2f} {local_currency}")
+# ------------------------------------------------------------------------------------------------------
+# WRAP-UP
 
+    print()
+    print()
+    print(f"Successfully processed {assets} resources".center(len(line)))
+    print()
+    print()
+
+    overview = []
+        
+    if fcr_sub != 0:
+        overview.append(["Equinix Fabric Cloud Routers:", fcr, f"{fcr_sub:.2f} {local_currency}"])
+    if ne_sub != 0:
+        overview.append(["Equinix Network Edge Devices:", ne, f"{ne_sub:.2f} {local_currency}"])
+    if vc_sub != 0:
+        overview.append(["Equinix Fabric VCs:", vc, f"{vc_sub:.2f} {local_currency}"])
+    if ept_sub != 0:
+        overview.append(["Equinix Precision Time:", ept, f"{ept_sub:.2f} {local_currency}"])
+    if eia_sub != 0:
+        overview.append(["Equinix Internet Access:", eia, f"{eia_sub:.2f} {local_currency}"])
+    
+    overview.append(["\033[1mTotal Cost of project:", assets, f"{total:.2f} {local_currency}\033[0m"])
+
+    overview_tab = tabulate(
+        overview,
+        headers=["\033[1mProduct Elements", "Qty", f"MRC\033[0m"], 
+        tablefmt="fancy_grid"
+        )
+    if display == "s" or display == "ds":
+        print(overview_tab)
         
 except FileNotFoundError:
     print("Error: tfplan.json file not found")

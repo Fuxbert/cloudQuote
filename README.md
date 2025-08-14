@@ -31,6 +31,8 @@ cloudQuote calculates monthly pricing for:
 ### Equinix Network Edge
 - **Virtual Devices** (with or without secondary devices)
 
+### Equinix Precision Time
+
 ---
 
 ## 🚫 Currently Out of Scope
